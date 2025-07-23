@@ -101,4 +101,4 @@ class PHD():
         for i in range(self.n_reruns):
             threads[i].join()
         m = np.mean(ms)
-        return 1 / (1 - m)
+        return self.alpha / (1 - m)
