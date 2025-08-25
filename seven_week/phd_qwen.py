@@ -3,7 +3,8 @@ import torch
 from transformers import AutoTokenizer, AutoModel
 from tqdm import tqdm
 # from skdim.id import MLE
-from GPTID.IntrinsicDim import PHD
+from GPTID.IntrinsicDimCUDA import PHD
+from GPTID.IntrinsicDimCUDA import gpu_dist_matrix
 
 
 # Insert here path to model files in your syste,
@@ -45,7 +46,7 @@ def decode_by_tokens(inputs):
     return decoded_tokens
 
 
-def get_embeds(text, model=None, tokenizer=None, returns_tokenized=False, max_length=2048):
+def get_embeds(text, model=None, tokenizer=None, returns_tokenized=False, max_length=8192):
     inputs = tokenizer(preprocess_text(text), truncation=True,
                        max_length=max_length, return_tensors="pt").to(model.device)
     with torch.no_grad():
@@ -68,7 +69,7 @@ Returns:
                                                     estimated by Persistence Homology Dimension method.'''
 
 
-def get_phd_single(text, solver, max_length=2048):
+def get_phd_single(text, solver, max_length=8192):
     inputs = tokenizer(preprocess_text(text), truncation=True,
                        max_length=max_length, return_tensors="pt").to(device)
     with torch.no_grad():
@@ -85,17 +86,45 @@ def get_phd_single(text, solver, max_length=2048):
     )
 
     print("input_shape:", outp[0][0].cpu().numpy().shape)
+    dist_matrix = gpu_dist_matrix(outp[0][0].cpu().numpy())
 
     return solver.fit_transform(
-        outp[0][0].cpu().numpy(),
+        dist_matrix,
         min_points=mn_points,
         max_points=mx_points - step,
-        point_jump=step
+        point_jump=step,
+        dist=True
+    )
+
+
+def get_ph_single(text, solver, max_length=8192):
+    inputs = tokenizer(preprocess_text(text), truncation=True,
+                       max_length=max_length, return_tensors="pt").to(device)
+    with torch.no_grad():
+        outp = model(**inputs)
+
+    mx_points = inputs['input_ids'].shape[1]
+    mn_points = MIN_SUBSAMPLE
+    step = (mx_points - mn_points) // INTERMEDIATE_POINTS
+
+#     print(
+#         "mn_points =", mn_points,
+#         "max_points =", mx_points,
+#         "point_jump =", step
+#     )
+
+    print("input_shape:", outp[0][0].cpu().numpy().shape)
+    dist_matrix = gpu_dist_matrix(outp[0][0].cpu().numpy())
+#     print("dist_matrix.shape:", dist_matrix.shape)
+
+    return solver.fit_transform(
+       dist_matrix,
+       dist=True
     )
 
 
 
-def get_phd_single_loop(text, solver, n_tries=10, max_length=2048):
+def get_phd_single_loop(text, solver, n_tries=10, max_length=8192):
     values = []
     for _ in range(n_tries):
         values.append(get_phd_single(text, solver, max_length=max_length))
