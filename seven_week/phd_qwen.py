@@ -3,7 +3,7 @@ import torch
 from transformers import AutoTokenizer, AutoModel
 from tqdm import tqdm
 # from skdim.id import MLE
-from GPTID.IntrinsicDimCUDA import PHD
+from GPTID.IntrinsicDimCUDA import PHD, PH
 from GPTID.IntrinsicDimCUDA import gpu_dist_matrix
 
 
@@ -124,12 +124,18 @@ def get_ph_single(text, solver, max_length=8192):
 
 
 
+def get_ph_single_loop(text, solver, n_tries=10, max_length=8192):
+    values = []
+    for _ in range(n_tries):
+        values.append(get_ph_single(text, solver, max_length=max_length))
+    return np.mean(values)
+
+
 def get_phd_single_loop(text, solver, n_tries=10, max_length=8192):
     values = []
     for _ in range(n_tries):
         values.append(get_phd_single(text, solver, max_length=max_length))
     return np.mean(values)
-
 
 
 def get_raw_phd_in_loop(points, alpha=1.0, n_tries=10):
@@ -156,6 +162,30 @@ Returns:
     numpy.array of shape (number_of_texts, 1) --- Intrinsic dimension values for all texts in the input data
                                                     estimated by Persistence Homology Dimension method.
 '''
+
+
+def get_ph(
+    df,
+    key='text',
+    is_list=False,
+    alpha=1.0,
+    regression_type='vanilla',
+    n_tries=1
+):
+    dims = []
+    PH_solver = PH(alpha=alpha, metric='euclidean')
+    for s in tqdm(df[key]):
+        if is_list:
+            text = s[0]
+        else:
+            text = s
+#         print("text ===============:", text)
+        dims.append(
+            get_ph_single_loop(text, PH_solver, n_tries=n_tries)
+        )
+
+    return np.array(dims).reshape(-1, 1)
+
 
 
 def get_phd(
